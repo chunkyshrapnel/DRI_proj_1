@@ -109,16 +109,23 @@ gridmet_transform = [0.041666666666666664, 0, -124.78749996666667, 0, -0.0416666
 month_names = ee.List(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'july', 'aug', 'sep', 'oct', 'nov', 'dec'])
 size = bias.size().getInfo()
 listOfImage = bias.toList(size)
+import time
 
 for i in range(size):
     img = ee.Image(listOfImage.get(i))
     month = month_names.get(i).getInfo()
     assetId = 'projects/bor-evap/assets/rtma_gridmet_bias/v1/monthly/'+month
-    ee.Export.image.toAsset({
-      "image": img,
-      "description": month,
-      'assetId': assetId,
-      "crs": 'EPSG:4326',
-      "dimensions": '1386x585',
-      "crsTransform": gridmet_transform
-    })
+    args_dict = {
+        'image': img,
+        'description': month,
+        'assetId': assetId,
+        'crs': 'EPSG:4326',
+        'dimensions': '1386x585',
+        'crsTransform': gridmet_transform
+    }
+    task = ee.batch.Export.image.toAsset(**args_dict)
+    task.start()
+    while task.active():
+        print('Task Processing (id: {}).'.format(task.id))
+        time.sleep(5)
+
