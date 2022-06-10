@@ -1,0 +1,204 @@
+var bias_layer = ee.ImageCollection('projects/bor-evap/assets/rtma_gridmet_bias/v1/monthly');
+var mapPanel = ui.Map();
+mapPanel.layers().set(0, bias_layer.select('tmmn'));
+
+// This is a global variable used to keep track of the selected location.
+// I'm not sure if this is allowed in fucntional programming.
+var point = ee.Geometry.Point(-119.80045, 39.57337);  
+
+// Configure  map.
+mapPanel.setCenter(-95, 39, 4.1);
+mapPanel.style().set('cursor', 'crosshair');
+
+// Create an empty panel in which to arrange widgets..
+var panel = ui.Panel({style: {width: '30%'}});
+
+var title = ui.Panel([
+  ui.Label({
+    value: 'RTMA vs. Gridmet - Bias Visualization',
+    style: {fontSize: '25px', fontWeight: 'bold'}
+  }),
+]);
+panel.add(title);
+
+//Create lat and lon labels and load them in first
+var lon = ui.Label();
+var lat = ui.Label();
+panel.add(ui.Panel([lon, lat], ui.Panel.Layout.flow('horizontal')));
+
+// Replace the root with a split_panel 
+ui.root.clear();
+ui.root.add(ui.SplitPanel(panel, mapPanel));
+
+//////////////////////////////////////////////////////////////////////////////
+// I use a function here because both clicking the menu and clicking the map 
+// need to change the graph.
+// I'm pretty sure this is not considered functional programming but IDK.
+var changeGraphFunction = function(point, band){
+  
+//The following switch statement is used to set the meta data for the graph
+var chart_vAxis_name;
+var image_name;
+switch(band) {
+  case 'vs':
+    chart_vAxis_name = 'RTMA / gridMET (m/s)';
+    image_name =  'Wind Velocity at 10m';
+    break;
+    
+  case 'tmmn':
+    chart_vAxis_name = 'RTMA - gridMET (C°)';
+    image_name =  'Minimum Temperature';
+    break;
+    
+  case 'tmmx':
+    chart_vAxis_name = 'RTMA - gridMET (C°)';
+    image_name =  'Maximum Temperature';
+    break;
+
+  case 'srad':
+    chart_vAxis_name = 'RTMA / gridMET (w/m²)';
+    image_name =  'Surface Downward Shortwave Radiation';
+    break;
+    
+  case 'sph':
+    chart_vAxis_name = 'RTMA / gridMET (kg/kg)';
+    image_name =  'Specific Humidity';
+    break;
+
+  case 'eto':
+    chart_vAxis_name = 'RTMA / gridMET (mm)';
+    image_name =  'Daily Reference Evaporation(Grass)';
+    break;
+    
+  case 'etr':
+    chart_vAxis_name = 'RTMA / gridMET (mm)';
+    image_name =  'Daily Reference Evaporation(Alfalfa)';
+    break;
+    
+} 
+  var chart_layer = bias_layer.select(band);
+  
+  // Here the style is set and data is configured
+  // for the graph.
+  var chart = ui.Chart.image.series(chart_layer,
+    point, ee.Reducer.mean(), 10, 'month');
+  chart.setOptions({
+    title: 'Bias by Monthly Average - ' + image_name,
+    vAxis: {title: chart_vAxis_name},
+    hAxis: {title: 'Month', gridlines: {count: 12}},
+    series: {
+      0: {
+        color: 'blue',
+        pointSize: 4,
+      },
+    },
+    legend: {position: 'none'},
+  });
+  chart.setChartType('LineChart');
+  
+  //Overwrites the previous chart at position 3.
+  panel.widgets().set(3, chart);
+};
+
+//////////////////////////////////////////////////
+// Legend setup
+/*
+// Creates a color bar thumbnail image for use in legend from the given color
+// palette.
+
+var vis = {min: 0, max: 30, palette: 'black,gray,white'};
+
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, 1, 0.1],
+    dimensions: '100x10',
+    format: 'png',
+    min: 0,
+    max: 1,
+    palette: palette,
+  };
+}
+
+// Create the color bar for the legend.
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: makeColorBarParams(vis.palette),
+  style: {stretch: 'horizontal', margin: '0px 8px', maxHeight: '24px'},
+});
+
+// Create a panel with three numbers for the legend.
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(vis.min, {margin: '4px 8px'}),
+    ui.Label(
+        (vis.max / 2),
+        {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vis.max, {margin: '4px 8px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+var legendTitle = ui.Label({
+  value: 'Map Legend',
+  style: {fontWeight: 'bold'}
+});
+
+var legendPanel = ui.Panel([legendTitle, colorBar, legendLabels]);*/
+
+////////////////////////////////////////////////////////////////////////////////
+// Here the widget for the drop down menu and program repsonse functions are set.
+var image_select = ui.Select({
+  items: [
+    {label: 'Minimum Temperature', value: 'tmmn'},
+    {label: 'Maximum Temperature', value: 'tmmx'},
+    {label: 'Wind Velocity at 10m', value: 'vs'},
+    {label: 'Specific Humididy', value: 'sph'},
+    {label: 'Surface Downward Shortwave Radiation', value: 'srad'},
+    {label: 'Daily Reference Evapotranspiration(Alfalfa)', value: 'etr'},
+    {label: 'Daily Reference Evapotranspiration(Grass)', value: 'eto'}
+  ],
+  onChange: function(value) {
+    
+        // Here the previous overlway is cleared for the new map overlay
+        mapPanel.layers().set(0, bias_layer.select(value));        //Idk how to name the layer in the UI
+        
+        // Change graph to reflect the new overlay image.
+        changeGraphFunction(point, image_select.getValue());
+        
+        //change legned here
+        }
+});
+
+var menu_prompt = ui.Label();
+menu_prompt.setValue('Select Image: ');
+panel.add(ui.Panel([menu_prompt, image_select], ui.Panel.Layout.flow('horizontal')));
+image_select.setValue('tmmn');
+
+/////////////////////////////////////////////////////////////////
+// This functins runs everytime the user clicks the map.
+var clickHandler = function (coords) {
+  
+  // Update the lon/lat panel values.
+  lon.setValue('Longitude:  ' + coords.lon.toFixed(5));
+  lat.setValue('Latitude:  ' + coords.lat.toFixed(5));
+  
+  // Create a dot and add it to the map as the layer above the image.
+  point = ee.Geometry.Point(coords.lon, coords.lat);
+  var dot = ui.Map.Layer(point, {color: 'FF0000'}, 'Clicked Location');
+  mapPanel.layers().set(1, dot);
+  
+  // Call this function to update the graph in accordance of the new location. 
+  changeGraphFunction(point, image_select.getValue());
+
+};
+
+///////////////////////////////////////////////////////////////
+// Initialize the default loction marker 
+mapPanel.onClick(clickHandler);
+
+clickHandler({
+  lon: -119.80045,
+  lat: 39.57337
+});
+
+
